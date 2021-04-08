@@ -1,0 +1,260 @@
+% reset section counter
+\setcounter{section}{0}
+
+%\metadata{lecture ID}{Your names}{date}
+\metadata{1}{Lan Jiang and Sameer Sundrani}{April 2nd, 2021}
+
+\sec{Overview}
+
+In this lecture, we begin our exploration of nonparametric statistics. We first describe the underlying motivation for the field of nonparametric statistics and its general principles. Then, we look at our first examples of such statistics with the nonparametric regression problem, wherein we focus on three different approaches: the regressogram, local averaging, and Nadaraya-Watson kernel estimator.
+
+
+\sec{Overview of nonparametric statistics}
+
+The overarching idea of nonparametric statistics is that it does not leverage standard parameterization. While there are not many precise definitions for the field of nonparametric statistics, there are a few core tenets to know.
+\begin{itemize}
+	\item Make as few assumptions as possible. For example, do not assume that data extends from linear or quadratic model. 
+	\item No fixed set of parameters exists. For example, in nonparametric statistics we will often see across infinite dimensional models, infinite parameters, or circumstances where the dimension $\rightarrow \infty$ as the number of data point $n \rightarrow \infty$.
+\end{itemize}
+Such principles are widely applicable to many areas of statistics and machine learning, such as in nonparametric testing, supervised learning, and unsupervised learning. 
+
+However, often and particularly in this class, our data is low dimensional\footnote{In this course, low dimensions generally refers to the case when data dimension $d = 1, 2, 3$}, with exceptions like neural networks and some kernel methods. This is important since high dimensional data without many strong parametric assumptions will fundamentally and statistically need many samples (i.e. the data will need exponential dimensions) to estimate anything (density, CDF, etc.), suffering from the ``curse of dimensionality''. The lack of high dimensional data without many strong parametric assumptions results in estimate errors at the zero-th or first order. 
+
+\sec{The nonparametric regression problem}
+\subsec{Setup}
+Our first example in nonparametric statistics will be nonparametric regression. In such a problem, we have $n$ pairs of observations
+\begin{equation} 
+(x_1, Y_1), ..., (x_n, Y_n),
+\end{equation}
+ where each $x_i, Y_i \in \R$ and $x_i$ refers to an input (or covariate) and $Y_i$ refers to an output (or label) or response variable. Furthermore, each $Y_i$ can be written as
+  \begin{equation} 
+  	Y_i = r(x_i) + \xi_i,
+   \end{equation} 
+where $r(.)$ is some function and $\xi$ is some noise on the observed output. Here, $r(x_i)$ is defined by
+ \begin{equation} r(x_i) := \Exp[Y_i | x_i]
+ \end{equation} 
+and $\xi_i = Y_i - r(x_i)$, with $\Exp[\xi_i] = 0$. 
+
+With these observations now defined, we can view the regression problem under two frameworks: deterministic inputs or random inputs, and we will explore both possibilities in the subsequent sections.
+
+\subsec{Deterministic design and mean squared error}
+In this view, we treat $x_1, ..., x_n$ as fixed, deterministic inputs with $Y_1, ... Y_n$ being random variables. Our goal then is to estimate or recover $r(x_1), ..., r(x_n)$ as accurately as possible. Pictorially, we can see this in Figure \ref{fig:regression example}, where the red circular open dots are the "noisy" set of observations and the blue $r(x)$ is the function where each labeled $r(x_i)$ (in black circular open dots) is what we aim to recover. 
+
+Our estimator will therefore be denoted as $\hat{r}: \hat{r}(x_1), ..., \hat{r}(x_n)$. We will evaluate $\hat{r}$ utilizing mean squared error or MSE as  \begin{equation} \text{MSE}(\hat{r}) = \frac{1}{n} \sum_{i = 1}^{n} (\hat{r}(x_i) - r(x_i))^2.\end{equation} 
+Because there is randomness from each $Y_i$, we can rewrite this as an expectation utilizing the same form we just described as
+\begin{equation} \text{MSE} = \Exp[\text{MSE}(\hat{r})] = \Exp \left[\frac{1}{n} \sum_{i = 1}^{n} (\hat{r}(x_i) - r(x_i))^2\right].
+\end{equation}
+
+\begin{figure}[htbp!]
+	\begin{center}
+		\begin{tikzpicture}
+			\begin{axis}[
+				axis lines=middle,
+				xtick=\empty, ytick=\empty,
+				xlabel=$x$,ylabel=$y$,
+				]
+				\addplot[
+				domain = -10:10,
+				samples = 250,
+				smooth,
+				thick,
+				blue,
+				] {exp(-x/10)*( cos(deg(x)) + sin(deg(x))/10 )};
+				\addplot [only marks, mark = o, thick, red] table [y=Y, x=$X_1$]{figure/Lecture01/data.dat};
+				\addplot [only marks, mark = o, thick, black] table [y=$X_2$, x=$X_1$]{figure/Lecture01/data.dat};
+				\addlegendentry{$r(x)$}
+				\addlegendentry{$(x_i, Y_i)$'s}
+				\addlegendentry{$r(x_i)$'s}
+			\end{axis}
+		\end{tikzpicture}
+		\caption{Graphical representation of regression problem}
+		\label{fig:regression example}
+	\end{center}
+\end{figure}
+
+
+\subsec{The alternative view point: random design}
+Alternatively, we could have viewed our input as a series of independent and identically distributed  random variables $X_1, ..., X_n \iid P$ (note the upper-case $X_i$ now) where our $Y_i = r(X_i) + \xi_i$. Our interpretation of such an perspective while modeling the problem remains very similar, though, and our estimator is still some $\hat{r}$ evaluated using MSE as $\Exp_{X\sim P} [(\hat{r}(X) - r(X))^2]$. For the rest of this note, though, we will maintain within the deterministic design paradigm described above. 
+
+\subsec{Motivation for nonparametric regression}
+
+With our current understanding of the regression problem at hand, one may claim we can solve such examples parametrically by assuming that each $Y_i$ is a linear combination of the input (as in linear regression) or some polynomial combination of the input (as in polynomial regression). However, consider the regression where $r(x)$ is neither linear nor polynomial as in Figure \ref{fig:nonparametric regression example} where $r(x)$ cannot be fitted with any polynomial fit perfectly (assume here that after some $x_0$, $r(x \geq x_0)$ remains fixed at some constant value).
+
+To see why polynomial regression would fail, suppose we fit $r(x)$ with $f(x)$ a $k$-degree polynomial. Suppose $x_1, \cdots, x_{k+1} \geq x_0$ and then $f(x_1) =  ... = f(x_{k+1}) = c$ for distinct values of $x_1, ... , x_{k+1}$. Since a $k$-degree polynomial is uniquely determined to its values at $k+1$ different points, the only possible solution would be $f(x) = c$, the constant function. Therefore it is not possible to fit all the points on both the right and left hand side of this curve above. We now see that we cannot simply make an assumption of the behavior of our $r(x)$ in this case, and must turn to new ways of achieving our goal. We turn now to some methodologies of nonparametric regression. 
+
+\begin{figure}[htbp!]
+	\begin{center}
+		\begin{tikzpicture}
+			\begin{axis}[
+				axis lines=middle,
+				xtick=\empty, ytick=\empty,
+				xlabel=$x$,ylabel=$y$,
+				ymin=-1,ymax=1,
+				]
+				\addplot [smooth, thick, red] table [y=$X_3$, x=$X_1$]{figure/Lecture01/data.dat};
+				\addlegendentry{$r(x)$}
+			\end{axis}
+		\end{tikzpicture}
+		\caption{nonparametric regression problem on which polynomial regression fail.}
+		\label{fig:nonparametric regression example}
+	\end{center}
+\end{figure}
+
+\sec{nonparametric regression methods}
+
+\subsec{Regressogram}
+Our first methodology to approach our modeling problem is known as the regressogram approach. Our algorithm is quite rudimentary: divide our domain of $x$ into some number of bins (assume that our bins are of equal size) as shown in Figure \ref{fig:regressogram}. For each $(x_i, Y_i)$ that falls within a given bin $B_j$, our estimator is defined as
+ \begin{equation}\hat{r} = \frac{1}{|B_j|}\sum_{i \in B_j} Y_i,\end{equation}
+ which is, in other words, the average of all $Y_i$ where $x_i \in B_j$. Because each point will fall into some $B_j$ (and for all bins where there is no observation, we won't have a defined prediction), we recover a piece-wise constant function for that $B_j$. We then see that each point within a particular $B_j$ will recover the same $\hat{r}$. While this approach is simple, it is not often used in practice as choosing the binning method and size is quite tricky. Additionally, some bins may not capture many observations while others may not capture enough of a set of observations if there are too many variable regions within a bin. 
+
+\begin{figure}
+	\begin{center}
+		\begin{tikzpicture}
+			\begin{axis}[
+				axis lines=middle,
+				xtick=\empty, ytick=\empty,
+				xlabel=$x$,ylabel=$y$,
+				ymin=-1,ymax=1,
+				]
+				\addplot [smooth, thick, red] table [y=$X_3$, x=$X_1$]{figure/Lecture01/data.dat};
+				\addplot[thick, samples=50, dashed,black] coordinates {(2,-1)(2,3)};
+				\addplot[thick, samples=50, dashed,black] coordinates {(-2,-1)(-2,3)};
+				\addplot[thick, samples=50, dashed,black] coordinates {(-1,-1)(-1,3)};
+				\addplot[thick, samples=50, dashed,black] coordinates {(1,-1)(1,3)};
+				\addplot[thick, samples=50, dashed,black] coordinates {(3,-1)(3,3)};
+				\addplot[thick, samples=50, dashed,black] coordinates {(-3,-1)(-3,3)};
+				\addplot[thick, samples=50, smooth,purple, domain= -3:-2] coordinates {(-3,-0.2)(-2,-0.2)};
+				\addplot[thick, samples=50, smooth,purple, domain= -2:-1] coordinates {(-2,0.3)(-1,0.3)};
+				\addplot[thick, samples=50, smooth,purple, domain= -1:0] coordinates {(-1,0.43)(0,0.43)};
+				\addplot[thick, samples=50, smooth,purple, domain= 0:1] coordinates {(0,0.4)(1,0.4)};
+				\addplot[thick, samples=50, smooth,purple, domain= 1:2] coordinates {(1,0.3)(2,0.3)};
+				\addplot[thick, samples=50, smooth,purple, domain= 2:3] coordinates {(2,0.25)(3,0.25)};
+				\addlegendentry{$r(x)$}
+			\end{axis}
+		\end{tikzpicture}
+		\caption{Regressogram binning with piecewise constant functions}
+		\label{fig:regressogram}
+	\end{center}
+\end{figure}
+
+
+\subsec{Local averaging}
+As the original regressogram can easily fail to capture or over-capture a set of observations, we move to a modified version of binning known as local averaging. Here, we instead define bins dynamically i.e. for each observation $(x_i, Y_i)$, we define a bin of some size $h$ in each direction around that value. Each bin is therefore defined in terms of a particular observation such that $B_{x_i} = \{j: |x_j -x_i| \leq h\}$ where our estimator is now \begin{equation} \hat{r}(x_i) = \frac{1}{|B_{x_i}|}\sum_{i \in B_{x_i}} Y_i,\end{equation} 
+which is, similar to before, an average, but now with the nuance that each bin is defined with respect to each observation. One such bin with locally averaged $\hat{r}(x_i)$ can be seen in Figure \ref{fig:local averaging}. Note that we are making the assumption that within each $B_{x_i}$, $\hat{r}(x_i)$ is a constant denoted by $a$. Following this assumption, we can then derive $\hat{r}(x_i)$ as minimizing the MSE inside each local bin, namely
+\begin{equation}
+	\hat{r}(x_i) = \argmin_{a} \frac{1}{|B_{x_i}|}\sum_{i \in B_{x_i}} (Y_i - a)^2 = \frac{1}{|B_{x_i}|}\sum_{i \in B_{x_i}} Y_i.
+\end{equation}
+Setting the first derivative of this function to zero and solving for $a$, we see that the minimum $a$ would be the average value within a bin, as we estimate within this method.
+
+As with the regressogram, we make some assumptions in local averaging that may not be sufficient for our regression. Namely, we are assuming that we can safely ignore all points outside the boundary of each $B_{x_i}$, even if such points are borderline to the bin determined by some $h$. Such a problem motivates our next methodology: soft-weight averaging. 
+
+\begin{figure}
+	\begin{center}
+		\begin{tikzpicture}
+			\begin{axis}[
+				axis lines=middle,
+				xtick=\empty, ytick=\empty,
+				xlabel=$x$,ylabel=$y$
+				]
+				\addplot [only marks, mark = x, thick, red] table [y=$Y_1$, x=X]{figure/Lecture01/data2.dat};
+				\addplot[thick, samples=50, dashed,black] coordinates {(2.5,-1)(2.5,3)};
+				\addplot[thick, samples=50, dashed,black] coordinates {(1.5,-1)(1.5,3)};
+				\addplot[thick, samples=50, smooth, blue] coordinates {(2,-1)(2,1.95)};
+				\addplot[thick, samples=50, smooth, red] coordinates {(1.5,2)(2.5,2)};
+				\addlegendentry{$r(x_i)$'s}
+			\end{axis}
+		\end{tikzpicture}
+		\caption{Local averaging with one $x_i$, estimating $\hat{r}(x_i)$ as a red line}
+		\label{fig:local averaging}
+	\end{center}
+\end{figure}
+
+
+
+\subsec{Nadaraya-Watson kernel estimator (soft-weight averaging)}
+As we saw in the previous section on local averaging, we make a potentially detrimental assumption that all points outside the boundary of a given bin should not be considered for our estimator $\hat{r}(x)$. To alleviate this problem, we introduce the concept of soft-weight averaging, where we introduce a weighting for each observation that can be distance dependent. More specifically, we define our new constant estimate $a$ for each observation $(x_i, Y_i)$ over all $n$ observations as follows
+ \begin{equation}\argmin_{a \in \R} \sum_{i = 1}^n w_i (Y_i - a)^2 =\frac{\sum_{i = 1}^n w_iY_i}{\sum_{i = 1}^n w_i},\end{equation} 
+where the minimizer can be found by taking derivative w.r.t. $a$. Notice that if $w_i = \bm{1}\cbr{|x_i - x| \leq h}$, we recover the same local averaging we have previously described. In general, we desire $w_i$ to be smaller as $| x_i - x |$ increases and for any  $| x_i - x | > | x_j - x |$ it follows that $w_i < w_j$. 
+
+We now need to define a weighting scheme that satisfies our weighting desires, and we will do so using a kernel estimator. Namely, because we desire to have a weighting dependent on the distance a particular observation $x_i$ is from $x$, we will define 
+\begin{equation}
+w_i = f(x_i -x) = K\rbr{\frac{x_i -x}{h}},
+\end{equation}
+where $K(\cdot)$ is a kernel function and $h$ is the width of our bins. 
+\subsec{Kernel functions}
+Before we describe further our possible choices of kernel $K$, we must define more specifically what properties $K$ follows. Formally, we make the following definition.
+\begin{definition}[Kernel function] $K: \R \to \R$ is called a kernel function if it is non-negative and satisfies the following properties.
+	\begin{enumerate}
+		\item $\int_{\R} K(t) dt = 1$. $K$ is normalized and scales to 1. 
+		\item $\int_{\R} tK(t)dt = 0$. There must be some kind of symmetry within $K$. 
+		\item $\sigma_t^2 := \int_{\R} t^2 K(t) dt > 0$.
+	\end{enumerate}
+\end{definition}
+Now, we will discuss four variants of kernels. We start by the boxcar kernel
+\begin{equation}K(t) = \frac{1}{2}\bm{1}\cbr{|t| \leq 1}.\end{equation} 
+The boxcar is named for its box-like shape and can be seen in red in Figure \ref{fig:kernels} overlayed with the Gaussian kernel as well. One then sees that this corresponds exactly to local averaging for some $h$.  Next we have the Gaussian kernel
+ \begin{equation}K(t) = \frac{1}{\sqrt{2\pi}}\exp\rbr{\frac{-t^2}{2}},\end{equation}
+Unlike the boxcar, here we have some non-zero weight for some $x_i$ when $|x_i - x| > h$, which tapers off as that difference increases. Other choices of kernels include the Epanechnikov kernel 
+\begin{equation}
+	K(t) = \frac{3}{4}(1 - t^2)\bm{1} \cbr{|t| \leq 1}
+\end{equation}
+and the tricube kernel
+\begin{equation}
+	K(t) = \frac{70}{81}(1 - |t|^3)\bm{1} \cbr{|t| \leq 1}.
+\end{equation}
+In practice, however, the explicit choice of kernel is not that important empirically between the these (excluding boxcar). 
+
+\begin{figure}
+	\begin{center}
+		\begin{tikzpicture}
+			\begin{axis}[
+				axis lines=middle,
+				xtick={-1, 0, 1}, ytick=\empty,
+				xlabel=$x$,ylabel=$y$, 
+				ymin=0, ymax = 1
+				]
+				\addplot [thick, red] table [y=$Y_1$, x=X]{figure/Lecture01/data3.dat};
+				\addplot[
+				domain = -5:5,
+				samples = 250,
+				smooth,
+				thick,
+				blue,
+				] {(1/(sqrt(2*pi))*exp(-(x^2)/2)};
+				\addlegendentry{Boxcar}
+				\addlegendentry{Gaussian}
+			\end{axis}
+		\end{tikzpicture}
+		\caption{Boxcar and Gaussian Kernels}
+		\label{fig:kernels}
+	\end{center}
+\end{figure}
+
+\subsec{Choosing the bandwith}
+Finally, we approach the discussion of choosing our bin width $h$. Larger or smaller values of $h$ can dramatically change our estimates $\hat{r}(x_i)$, so understanding how to do so is critical for our regression. To see why this is true, consider any choice of kernel. Here we see that if we increase $h$, we are simply increasing the bin widths (imagining a larger width in, say, Figure \ref{fig:local averaging}) and thereby averaging more observations for any particular $x_i$. In other words, a large $h$ allows for greater weightings $w_i$ for farther observations. 
+
+In practice, we see that this choice of $h$ is highly dependent on the data. For example, if observations are truly close to one another and have a similar true value of $r(x)$, we will achieve better results using a large $h$. To see this, consider the example set of observations in Figure \ref{fig:choosing h large}, where we see small fluctuations across observations but on average not very many differences and assume that the true value is somewhere along the average of these observations. Here, an $h = 0$ would yield separate constants for each observation and no ``denoising'' for each observation. On the other hand, choosing $h = \infty$ here would yield the same  constant prediction $\hat{r}(x_i)$ for each $x_i$, which we can see as follows: \begin{equation}\frac{1}{n}\sum_{i =1}^n Y_i = \frac{1}{n}\sum_{i =1}^n r(x_i) + \xi_i = \frac{1}{n}\sum_{i =1}^n c + \xi_i = c + \frac{1}{n}\sum_{i =1}^n \xi_i \approx c \pm \frac{1}{\sqrt{n}} \end{equation}
+where we draw the simplification of the last term via the central limit theorem. \footnote{Assuming $\Var(\xi_i) =1$, the central limit theorem implies $\frac{1}{\sqrt n} \sum_{i =1}^n \xi_i \xrightarrow{\mathrm d} \sf{N}(0,1)$.}
+
+If instead we had chosen a moderate $h$, our estimate for each $x_i$ may have not included all observations and then would be represented using a similar derivation as follows: \begin{equation}\hat{r}(x_i) = \frac{1}{|B_{x_i}|}\sum_{j \in B_{x_i}} Y_j = \frac{1}{|B_{x_i}|}\sum_{j \in B_{x_i}} r(x_j) + \xi_j =\frac{1}{|B_{x_i}|}\sum_{j \in B_{x_i}} c + \xi_i = c + \frac{1}{|B_{x_i}|}\sum_{j \in B_{x_i}} \xi_i \approx c \pm \frac{1}{\sqrt{|B_{x_i}|}}\end{equation} where we can see here that we could be obtaining a noisier value for our estimate compared to a larger $h$. 
+
+Finally, considering another extreme case, where the true $r(x)$ fluctuates a lot such as the $r(x)$ in Figure \ref{fig:regression example}, utilizing a large $h$ would yield a poorer result than simply assuming there is no noise $\xi_i$ and simply choosing $h = 0$. In such a case, although we may not be correct in our assumption, we may still obtain a reasonable estimate $\hat{r}(x_i) = Y_i$ (when $h = 0$). 
+\begin{figure}
+	\begin{center}
+		\begin{tikzpicture}
+			\begin{axis}[
+				axis lines = middle,
+				xtick=\empty, ytick=\empty,
+				xlabel=$x$,ylabel=$y$, 
+				ymin = 0, ymax = 3,
+				]
+				\addplot [only marks, mark = o, thick, red] table [y=Y, x=$X_1$]{figure/Lecture01/data4.dat};
+				\addplot[thick, samples=50, dashed,black] coordinates {(9,-1)(9,3)};
+				\addplot[thick, samples=50, dashed,black] coordinates {(2,-1)(2,3)};
+				\addplot[thick, samples=50, smooth,red] coordinates {(2,1)(9,1)};
+			\end{axis}
+		\end{tikzpicture}
+		\caption{Example where choosing a large $h$ would yield a better estimate}
+		\label{fig:choosing h large}
+	\end{center}
+\end{figure}

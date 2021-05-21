@@ -1,0 +1,426 @@
+%\newcommand{\Exp}{\mathbb{E}}
+
+
+
+% reset section counter
+\setcounter{section}{0}
+
+%\metadata{lecture ID}{Your names}{date}
+\metadata{7}{Abigail VanderPloeg}{May 14th, 2021}
+
+\sec{Review and overview}
+In the previous few lectures, the class have covered neural network methods. While topics such as local linear regression and splines are considered classical methods in nonparametric studies (having been developed 30 years ago), most recently covered lecture topics of kernel methods and neural networks are part of modern nonparametric methods.
+
+This lecture will conclude the class's coverage of neural networks for use on the smaller datasets often seen in nonparametric statistics. Next, the lecture begins discussion of unsupervised learning, which does not have an output or response variable for the input data. Instead, we wish to learn about the underlying distribution of the input data, which can be achieved with CDF and density estimation methods. 
+
+
+\sec{Neural networks: few-shot learning}
+
+\subsec{Transfer learning}
+Here we continue the lectures' coverage of transfer learning, which is one way in which we can utilize neural networks on small datasets. 
+
+Transfer learning involves first training a model on a big data set (as can be done by other researchers such as those at Google, who have released pre-trained models), then fine-tuning the model on the smaller data set. One way in which to fine-tune the model is to remove only the last layer of the model and replace it with a new, randomly initialized last layer that will be fine-tuned. Another approach is to fine-tune the entire network by again replacing the last layer of the model with a new, randomly initialized last layer, and then to fine-tune the parameters of the entire model with a small number of passes over the data.
+
+\subsec{Few-shot learning}
+Few-shot learning is utilized in an even more extreme case than transfer learning, when the dataset is even smaller. The learning setting involves training data of, say, $N$ examples and $l$ classes, where both $N$ and $l$ are very big (ImageNet \cite{deng2009imagenet}, a standard example, has $N = 1.2$M and $l = 10^3$).
+ 
+At test time, however, we are only given a small number of examples $(\tilde{x}^{(1)}, \tilde{y}^{(1)}), ..., (\tilde{x}^{(nk )}, \tilde{y}^{(nk)})$ drawn independently and identically distributed from a distribution $P_{\text{test}}$. There are $k$ new labels or classes and $n$ images per each new class. In this scenario, $n$ is very small (such as $n = 5$), and $k$ could be bigger. Such a setting is called a ``$k$-way $n$-shot setting." With this limited data for each new class, the goal is to classify the examples from $P_{\text{test}}$ with one of the $k$ labels. In few-shot learning settings, the feature dimension is typically large (on the order of $10^3$), which makes it difficult to fine-tune a model to the small test dataset, as was done in transfer learning, because overfitting becomes likely.
+
+\subsec{Nearest neighbor algorithms using features}
+A simple but competitive algorithm in few-shot learning settings is nearest neighbor methods using features, with steps as follows:
+\begin{enumerate}
+	\item Pretrain neural networks on the large pretraining dataset, which results in an output of $a^\top \phi_W(x)$.
+	\begin{enumerate}
+		\item In this case, we enforce $\phi_W(x)$ to have a norm of 1 during training. (This is helpful in order to not have dramatically different norms for different examples, and is likely applied by research teams such as Google who release pretrained neural networks.) \\ \\
+		This can be done in one of two ways by changing the parameterization
+		\begin{align}
+			\phi_W(x) &= \text{normalize}(NN_W(x)) = \frac{NN_W(x)}{\norm{NN_W(x)}_2}. \nonumber
+		\end{align}
+		for $NN_W(x)$ as the standard feed-forward NN. This normalization is a sequence of elementary operations, which can be done efficiently (such as computing $\lVert NN_W(x) \rVert_2$) and allows for efficient gradient calculations with auto-differentiation in backpropagation. Performing this operation then implies that $\norm{\phi_W(x)}_2 = 1$.
+	\end{enumerate}
+	\item At test time, we utilize an one-nearest neighbor algorithm. (Here, we predict based on the single nearest neighbor rather than a combination of the $k$ nearest as used in $k$-nearest neighbors.) Generally, given an example $x$, we wish to predict the output label $y$. The steps are as follows:
+	\begin{enumerate}
+		\item Compute $\phi_w(x)$.
+		\item Find nearest neighbor in
+		$\{\phi_w(\tilde{x}^{(1)}), ..., \phi_w(\tilde{x}^{(nk)})\}$. \\ \\
+		The ``nearness" is quantified according to $\ell_2$ distance or cosine distance. $\ell_2$ distance calculates $d(a,b) = \norm{a - b}_2$. Squaring this calculation results in
+		\al{
+			\lVert a - b \rVert_2^2 = \norm{a}_2^2 + \lVert b \rVert_2^2 - 2\braket{a,b}.
+			%$ = 2 - 2\braket{a,b} $ \text{(Outputs $\phi_w(\tilde{x}^{(i)})$ have been enforced to have unit norms)}
+		}
+		which, given the unit norms enforced on outputs $\phi_w(\tilde{x}^{(i)})$, can be simplified to
+		\al{
+			\lVert a - b \rVert_2^2 = 2 - 2\braket{a,b}.
+		}
+		which is a constant shift from the cosine distance $2\braket{a,b}$, the cosine angle between two vectors $a,b$. \\
+		\\ Let's suppose that the nearest neighbor is $\phi_w(\tilde{x}^{(j)})$. \\
+		\item Assign the output label of $\tilde{y}^{(j)}$, or the label of the ``nearest neighbor," to the example $x$.
+	\end{enumerate}
+\end{enumerate}
+
+\sec{Unsupervised learning: estimating the CDF}
+Now we return to classical methods, with one-dimensional problems that can be described by CDFs and PDFs (rather than the high-dimensional feature sets of machine learning).
+
+\subsec{Setup of CDF estimation}
+Let $F$ be the CDF of some distribution over $\mathbb{R}$. Additionally, let us observe $n$ examples from this distribution
+\al{ \nonumber
+	X_1, ..., X_n \iid F.
+}
+Our goal is to estimate the underlying function $F(x)$.
+
+From earlier lectures, we can recall that a property of the CDF is that if $X \sim F$, then $\boxed{F(x) =\Pr  \left[X \leq x\right]} \in \left[0, 1\right]$ (the probability that we observe an output less than or equal to $x$). $F(x)$ is monotonically increasing, and an example of CDF is shown in Fig.~\ref{fig:cdf}.
+
+\begin{figure}[htbp!]
+	\centering
+	\includegraphics[scale = 0.6]{figure/Lecture07/CDF.png}
+	\caption{Example of CDF,  the sigmoid function $f(x) = \frac{1}{1+e^{-x}}$.} \label{fig:cdf}
+\end{figure}
+
+\subsec{Empirical estimators}
+Given the empirical examples $X_1, ..., X_n \iid F$, we can estimate the underlying CDF, $F(x)$, by evaluating how often $X_i \leq x$ for a given $x$ and $1 \leq i \leq n$ (how often our examples are less than or equal to the input value). Thus, we can consider the empirical estimator $\hat{F}_n(x)$ defined as
+\al{
+	\hat{F}_n(x) = \frac{1}{n} \sum_{i=1}^n \mathbbm{1}(X_i \leq x). %\leq 1
+}
+We can make the following observations on the function $\hat{F}_n(\cdot)$:
+\begin{itemize}
+	\item$\hat{F}_n(\cdot)$ as a function is called an \textbf{empirical distribution function}. 
+	\item $\hat{F}_n(\cdot)$ is a step function which only takes values in $\left[0, \frac{1}{n}, ..., 1 \right]$. This is because $\hat{F}_n(\cdot)$ multiplies $\frac{1}{n}$ by a sum of $n$ integers with values $\in \{0,1\}$, which then implies that $0 \leq \hat{F}_n(x) \leq 1$. 
+	\item$\hat{F}_n(\cdot)$ is a CDF itself, and  is in fact the CDF of the uniform distribution over $\{X_1, ..., X_n\}$.
+\end{itemize}
+Using the previous example of $F(x)$ (the sigmoid function), we can illustrate what form the estimator will take for an example with $n = 4$ data points in Fig.~\ref{fig:emp-cdf}.
+
+
+\begin{figure}[htbp!]
+	\centering
+	\includegraphics[scale = 0.6]{figure/Lecture07/CDF_est1.jpg}
+	\caption{Example of empirical CDF.} \label{fig:emp-cdf}
+\end{figure}
+
+Although this class will not overview the in-depth theory, it is possible to show for a given $x$ that as the number of examples $n \to \infty$, this estimator $\hat{F}_n(x)$  converges to the underlying distribution function $F(x)$. 
+
+In the extreme lower and/or upper range of inputs $x$, the density of data points is close to 0 (since $F(x)$ is flat), and the estimator does not change to transition to the next``increased step" often given the relative lack of examples in these regions. In the opposite scenario in a region where $F(x)$ increases sharply, there are more examples in this region, and the CDF will increase (transition to the next step) more quickly. 
+
+The following section involves analysis of simple theorems related to the estimator $\hat{F}_n(x)$.
+\begin{theorem}
+	For any fixed value of $x$, the expectation of the empirical estimator, $\mathbbm{E}\left[\hat{F}_n(x)\right]$, satisfies 
+	\al{\mathbbm{E}\left[\hat{F}_n(x)\right] = F(x),} with randomness over the choice of $X_1, ..., X_n$. This means that $\hat{F}_n(x)$ is an unbiased estimator of $F(x)$.
+\end{theorem}
+
+\noindent \textbf{Proof}
+This result can be seen by evaluating the $\mathbbm{E}\left[\hat{F}_n(x)\right]$, since
+\al{
+	\mathbbm{E}\left[\hat{F}_n(x)\right] &= \mathbbm{E}\left[\frac{1}{n} \sum_{i=1}^n \mathbbm{1}(X_i \leq x) \right]  \nonumber \\
+	&= \frac{1}{n} \sum_{i=1}^n \mathbbm{E} \left[\mathbbm{1}(X_i \leq x) \right] \nonumber \\ 
+	&= \frac{1}{n} \sum_{i=1}^n \Pr (X_i \leq x) \nonumber \\ 
+	&= F(x).
+}
+We can also evaluate the variance of $\hat{F}_n(x)$ as
+\al{
+	\Var\left[\hat{F}_n(x)\right] = \frac{F(x)(1-F(x))}{n}.
+}
+and observe that the numerator is bounded in the range $\left[0,1 \right]$ while the denominator becomes larger (approaching infinity) with more and more examples. This means that, with more examples, the variance becomes smaller, and the (unbiased) estimate becomes more accurate. Therefore, we see that 
+\al{
+	\Var\left[\hat{F}_n(x)\right] \overset{p}{\to} F(x).
+}
+or that our estimator converges in probability to the true underlying function (with more and more examples).
+\begin{theorem}[Glivenko-Cantelli]
+	\al{
+		\underset{x}{\sup} \, |\hat{F}_n(x) - F(x)| \:{\xrightarrow{a.s.}} \: 0.
+	}
+	This means that the supremum of $|\hat{F}_n(x) - F(x)|$ almost surely converges to 0.
+\end{theorem}
+Expressed in words, the Glivenko-Cantelli theorem ensures that the estimator converges to the true underlying distribution over the entire function.
+\begin{remark}
+While smoothing may produce an estimator that looks more similar to a true CDF, the step-wise estimator described is optimal to ensure the convergence of the estimator to the underlying CDF, and smoothing is therefore not necessary. However, this estimator has a zero derivative at most places and no derivative in others, which makes it inapplicable when trying to estimate the density of the data (which is the derivative of the CDF). 
+\end{remark}
+
+\subsec{Estimating functionals of the CDF}
+Consider $T(F)$, which is a function of the CDF $F$. For examples, $T(F)$ could be any of the following functions of $F$ that represent a property of the CDF:
+\begin{itemize}
+	\setlength\itemsep{0em}
+	\item Mean of  the distribution $F$.
+	\item Variance of $F$.
+	\item Skewness of $F$ (measuring the asymmetry of the CDF about the mean).
+	\item Quantile of $F$.
+\end{itemize}
+A \textbf{plug-in estimator} uses $T(\hat{F}_n)$ as the estimator (directly plugging in the estimator for $F$ into the functional). Under certain conditions (satisfied with the functionals listed above), $T(\hat{F}_n) \rightarrow T(F)$. Note that more ``abnormal" functions of F (such as the derivative) do not satisfy these conditions.
+
+\sec{Unsupervised learning: density estimation}
+As before, we assume that we have data points
+\begin{align} \nonumber
+	X_1, ..., X_n \overset{iid}{\sim} F.
+\end{align}
+with $F$ as the CDF of the underlying data distribution.
+
+The PDF, or density, is $f = F'$. In other words, it is the derivative of the CDF. In density estimation, the goal is to estimate the underlying density function $f$ from the data $X_1, ..., X_n$.
+
+In order to do so, we utilize technical ideas similar to regression problems. In this case, instead of predicting over an output $y$, we aim to predict $f(x)$. However, we do not directly observe $f(x)$ in any of the data points. This problem is separate from the problem of empirical CDF estimates, since we cannot simply take $\hat{f} = \hat{F}_n(x)'$ for an empirical CDF estimator $\hat{F}_n(x)$ because this CDF estimator is a step function which has a derivative of 0 at most inputs and infinity at the location of the data points.
+
+\subsec{Measuring performance of density estimators}
+There are several different ways in which to measure and evaluate the performance of density estimators. The most common way in which we can measure the performance of a density estimator $\hat{f}$ in accurately estimating the true density $f$ is by calculating the \textbf{integrated mean square error}: 
+\al{
+	R(\hat{f},f) &= \int \left(\hat{f}(x) - f(x)\right)^2 dx.  \nonumber
+}
+For a one-dimensional problem, this can be seen as a natural extension the mean squared error. 
+
+Another way to calculate the risk in order to measure performance is to calculate the \textbf{$\ell_1$ integrated risk}, also known as the \textbf{total variation (TV) distance} between the two distributions $f$ and $\hat{f}$:
+\al{
+	R_{\ell_1}(\hat{f},f) &= \int \left|\hat{f}(x) - f(x)\right| dx.
+} 
+Throughout the rest of the lecture, we will utilize the mean squared error as a metric to evaluate density estimator performance.
+\begin{remark} The mean squared error is not very useful in high dimensions. (If $f = \hat{f}$, then the mean squared error will evaluate to 0, but this error generally does not scale well in higher dimensions.)
+\end{remark}
+\subsec{Mean squared error in high-dimensional spaces}
+
+Consider the $d$-dimension problem as follows. We assume that $f$ is a spherical Gaussian $\sim \mathcal{N}(0, I)$. It follows that 
+\al{
+	f(x) = \frac{1}{\left(\sqrt{2\pi}\right)^d} \cdot \exp\left(-\frac{1}{2} \lVert x \rVert_2^2\right).
+}
+Some key observations we can make about this density function are:
+\begin{itemize}
+	\item $f$ is a density and therefore \al{
+		f(x) \geq 0.
+	}
+	\item We can evaluate the point with the largest density as
+	\al{
+		\underset{x}{\sup}\,f(x) = f(0) \leq \frac{1}{\left(\sqrt{2\pi}\right)^d}. \;\;\;\; \text{(an inverse exponential)}
+	}
+	This means that, in high dimensional-spaces, we are aiming to predict very small values, which becomes an issue that is exacerbated in the integrated mean squared error calculation.
+\end{itemize}
+Now, consider some $\hat{f}$ that approximates $f$ reasonably well. Because we have shown the output of $f(x)$ to be less than the inverse exponential $\frac{1}{\left(\sqrt{2\pi}\right)^d}$, we can reasonably expect that $\hat{f} \leq \frac{1}{\left(\sqrt{2\pi}\right)^d}$ for most $x$.
+
+We can evaluate the integrated mean squared error between the described $f$ and $\hat{f}$ as follows:
+\al{
+	R(\hat{f},f) &= \int \left(\hat{f}(x) - f(x)\right)^2 dx \nonumber \\ \nonumber
+	&\leq \int \left| \hat{f}(x) - f(x) \right| \cdot \left(\lvert \hat{f}(x) \rvert + \lvert f(x) \rvert \right)dx \\ \nonumber
+	&\lesssim \frac{2}{\left(\sqrt{2\pi}\right)^d} \int \left| \hat{f}(x) - f(x) \right|dx \\  \nonumber
+	&\lesssim \frac{2}{\left(\sqrt{2\pi}\right)^d} \int \left(\hat{f}(x) + f(x)\right)dx \qquad \text{($f$ and $\hat{f}(x)$ are positive)} \\ \nonumber
+	&\leq \frac{4}{\left(\sqrt{2\pi}\right)^d}. \nonumber
+}
+In conclusion, if we have an estimator $\hat{f}$ such that $\hat{f}(x) \leq \frac{1}{\left(\sqrt{2\pi}\right)^d} \; \forall x$, then 
+\al{
+	R(\hat{f},f) \leq \frac{4}{\left(\sqrt{2\pi}\right)^d}.
+}
+and thus $f$ and $\hat{f}$ need not be close by any means for the error to be proportionally very small as an inverse exponential. Note that the TV distance can also not be very meaningful in high dimensions. Generally, the distance between two distributions in high-dimensional space is non-trivial. There are, however, alternatives used that offer slightly better method of measuring the performance of density estimators in high dimensions. One such alternative is the KL divergence metric. However, the KL divergence can still result in a large error for very similar distributions. Take, for example, two distributions $P_1 = \mathcal{N}(0, I)$ and  $P_1 = \mathcal{N}(\mu, I)$, where $\mu$ is a small vector. Then, the KL divergence can become very large. Wassertein distance is another alternative method that incorporates the geometry into the calculation, and performs better for examples such as distributions which are two point masses that are very close to one another, such as pictured below: 
+
+\subsec{Mean squared error and other errors in low-dimensional spaces} 
+Suppose that $d=1$ and the situation is thus low-dimensional In this case, use of the mean-squared error is ok (as well as other distance metrics discussed). Going forward in lecture, we will primarily focus on discussing one-dimensional scenarios.\\
+
+\subsec{Bias-variance tradeoff} 
+Just as we evaluated the bias-variance tradeoff in regression problems, we can calculate the bias-variance tradeoff with expectation of the integrated mean square error risk over the randomness of $X_1, ..., X_n$ as
+\al{
+	\Exp\left[\int \left(f(x) - \hat{f}(x)\right)^2dx\right] &=  \int\left(\Exp\left[ (f(x) - \hat{f}(x))^2\right]\right)dx.  \nonumber
+}
+Because, for a random variable $Z$, $\Exp\left[Z^2\right] = \left(\Exp\left[Z\right]\right)^2 + \Var(Z)$, then we can decompose the bias-variance tradeoff as:
+\al{
+	\Exp\left[\left(f(x) - \hat{f}(x)\right)^2\right] &= \left(\Exp\left[f(x) - \hat{f}(x)\right]\right)^2 + \Var\left[f(x) - \hat{f}(x)\right] \\ \nonumber
+	&= \left(f(x) - \Exp\left[\hat{f}(x)\right]\right)^2 + \Var\left[-\hat{f}(x)\right] \quad  \quad \text{ ($f(x)$ is a constant)} \\ \nonumber
+	&= \left(\Exp\left[\hat{f}(x)\right] - f(x)\right)^2 + \Var\left[\hat{f}(x)\right]. \nonumber 
+}
+Thus, we can continue to evaluate $\Exp\left[\int \left(f(x) - \hat{f}(x)\right)^2dx\right]$ as 
+\al{
+	\quad\Exp\left[\int \left(f(x) - \hat{f}(x)\right)^2dx\right] = \int \colorboxed{blue}{\left(\Exp\left[\hat{f}(x)\right] - f(x)\right)^2}dx + \int\colorboxed{red}{\Var\left[\hat{f}(x)\right]}dx.
+} 
+where the term in the blue box is the \textcolor{blue}{bias} term and the term in the red box is the \textcolor{red}{variance} (although sometimes each term including the integral is regarded as the bias and variance respectively). This clear distinction between bias and variance is a property of the integrated mean squared error loss.
+
+\subsec{Histograms}
+The first algorithm that we will discuss is the histogram algorithm, which is an analog of regressograms. Recalling from previous lectures, we remember that the process of solving a regressogram problem involves 
+\begin{enumerate}
+	\item binning the input domain
+	\item fitting constant density functions across each bin
+\end{enumerate}
+These two steps are also used in the histogram algorithm. 
+
+If we assume $X \in \left[0,1\right]$, then we can create bins $B_1, ..., B_m$ within the input range, and we generate a constant function across each bin, $z_1, ..., z_m$. To set up the notation we will utilize, we first define 
+\begin{center}
+	length of each bin $\triangleq h = \frac{1}{m}$.
+\end{center}
+Furthermore, let $Y_i$ equal the number of observations (data points) in each bin $B_i$. Then, we define $\hat{p}$ as
+\begin{center}
+	$\hat{p}_i = \frac{Y_i}{n} = $ the fraction of data points in bin $B_i$.
+\end{center} 
+The value of $z_i \propto \hat{p}_i$, but we need to normalize our $\hat{p}_i$ in order to achieve a proper density function.
+
+In order to form a proper density from $z_1, ..., z_n$, we require that 
+\al{
+	\int \hat{f}(x)dx &= \sum\limits_{i=1}^m \int_{B_i}\hat{f}(x)dx
+	=  \sum\limits_{i=1}^m h \cdot z_i = 1.
+}
+Suppose that $z_i = c \cdot \hat{p}_i$. Then, using the property that $\sum\limits_{i=1}^m\hat{p}_i = 1$, we see that
+\al{
+	\int \hat{f}(x)dx &= h \cdot c \sum\limits_{i=1}^m\hat{p}_i = 1 \;\; \implies \;\; c = \frac{1}{h \cdot \sum\limits_{i=1}^m\hat{p}_i} = \frac{1}{h} \;\; \implies \;\; z_i = \frac{\hat{p}_i}{h},
+}
+which tells us that each $z_i$ is computed as the fraction of the points in the bin $B_i$ normalized by the size of the bin. 
+More succinctly, we can write
+\al{
+	\hat{f}(x)dx &= \sum\limits_{j=1}^n z_j \mathbbm{1}(x \in B_j) = \sum\limits_{j=1}^n \frac{\hat{p}_j}{h} \mathbbm{1}(x \in B_j).
+}
+
+
+
+\subsec{Bias-variance of histogram}
+In the case of the histogram algorithm, we can explicitly compute the bias and variance. First, for use in our calculation of the bias and variance for $x \in B_j$, we can evaluate the expectation of the estimator on $x$ as
+\al{
+	\Exp\left[\hat{f}(x)\right] &=  \Exp\left[\frac{\hat{p}_j}{h}\right] \nonumber \\ \nonumber
+	& = \frac{1}{h} \cdot \Exp \left[p_j\right] \\ \nonumber
+	&= \frac{1}{h}\Pr\left[X \in B_j \right] %\quad \quad \quad \text{($\Exp \left[p_j\right]$ is the expected fraction of points in $B_j$)} 
+	\\ \nonumber
+	&= \frac{1}{h} \cdot \int_{B_j}f(u)du \\ \nonumber
+	&= \frac{p_j}{h}.
+}
+with $p_j \triangleq \Pr\left[X \in B_j \right]$ defined as the probability of a random sample being in bin $B_j$.
+\subsubsection{Bias}
+Thus, we can evaluate the bias as
+\al{
+	\text{Bias} &= \left( f(x) - \Exp\left[\hat{f}(x)\right] \right)^2 = \left( f(x) - \frac{p_j}{h} \right)^2. 
+}
+When $h$ is infinitesimally small, each bin becomes a very very small window. Knowing that $\int_{B_j}f(u)du$ can thus be approximated as $h \cdot f(x)$ for any $x \in B_j$ allows us to evaluate
+\al{
+	\frac{p_j}{h} &= \frac{1}{h} \int_{B_j}f(u)du \approx \frac{1}{h} \cdot h \cdot f(x) = f(x),
+}
+and thus the bias goes to $0$ as $h \to 0$.
+\subsubsection{Variance}
+When evaluating the variance of the estimator for $x \in B_j$,
+\al{
+	\Var\left(\hat{f}(x)\right) = \frac{1}{h^2}\Var\left(\hat{p}_j\right) \\ \nonumber
+}
+We can note that, for the number of points that fall into a given bin $B_j$ as $n\hat{p}_j$,
+
+\al{
+	n\hat{p}_j &= Y_j \sim \text{Binomial}(n,p_j) \\ \nonumber
+	&= \sum\limits_{j=1}^n \mathbbm{1}(X_i \in B_j),
+}
+where $\mathbbm{1}(X_i \in B_j)$ follows the Bernoulli distribution $B(p_j)$. \\ \\
+Thus, we can calculate the variance of $n\hat{p}_j$ as
+\al{
+	\Var(n\hat{p}_j)
+	&= \sum\limits_{i}^n \Var(\mathbbm{1}(X_i \in B_j)) = n \cdot p_j(1-p_j),
+}
+and we can therefore evaluate $\Var(\hat{p}_j)$ as
+\al{
+	\Var(\hat{p}_j) = \frac{1}{n^2}\Var(n\hat{p}_j) = \frac{p_j(1-p_j)}{n},
+}
+allowing us to evaluate $\Var(\hat{f}(x))$ as
+\al{
+	\Var(\hat{f}(x)) = \frac{1}{h^2}\Var(\hat{p}_j) = \frac{1}{h^2 \cdot n}p_j(1-p_j).
+}
+By analyzing the above result, we see that when $h \to 0$, then $\Var(\hat{f}(x)) \to \infty$, and when $n \to \infty$, then $\Var(\hat{f}(x)) \to 0$. (This is consistent with the results we saw for regression problems).
+
+\begin{theorem} 
+	Suppose $f'$ is absolutely continuous and that $\int f'(u)^2 du < \infty$. Then, for the histogram estimator $\hat{f}$, 
+	\al{
+		R(\hat{f}, f) = \colorboxed{blue}{\frac{h^2}{12} \int (f'(u))^2du} + \colorboxed{red}{\frac{1}{nh}} + \mathcal{O}(h^2) + \mathcal{O}(\frac{1}{n}),
+	}
+	where the term in the blue box is the \textcolor{blue}{bias} term and the term in the red box is the \textcolor{red}{variance}. (The bias depends upon the Lipschizes of $f$, meaning that $f$ must be smooth.)
+\end{theorem}
+
+\subsec{Finding the optimal $h^*$}
+The best value for $h$ is the minimizer of $R(\hat{f}, f)$ over $h$, ignoring higher order terms. Using the results from Theorem 7.5, we see that
+\al{
+	h^* &= \underset{h}{\argmin} \left[\frac{h^2}{12} \int (f'(u))^2du + \frac{1}{nh} \right] \\ \nonumber
+	&= \frac{1}{n^{\sfrac{1}{3}}} \cdot \left(\frac{6}{\int (f'(u))^2du}\right) ^{\sfrac{1}{3}},
+}
+which, most importantly, informs us that the rate that $h \propto \frac{1}{n^{\sfrac{1}{3}}}$. 
+Plugging in this choice of $h^*$, we get 
+\al{
+	R(\hat{f}, f) \sim \frac{c}{n^{\sfrac{2}{3}}}.
+}
+which shows that the convergence rate of the error as $n \to \infty$.
+
+
+\subsec{Proof sketch of Theorem 7.5}
+When working through linear regression problems in previous lectures, we never derived these theorems. However, we can prove Theorem 7.5 as shown in this proof sketch.  We have shown that $\hat{f}(x) = \frac{\hat{p}_j}{h}$ if $x \in B_j$. 
+
+We also saw that we can evaluate the expectation of the estimator $\hat{f}(x)$ at a point  $x \in B_j$ as 
+\al{
+	\Exp\left[\hat{f}(x)\right] = \frac{p_j}{h} = \frac{1}{h} \cdot \int_{B_j} f(u)du.
+}
+Before, we had roughly approximated $f(u) \approx f(x)$. However, we can more explicitly obtain an expression for $f(u)$ using a first order Taylor expansion:
+\al{
+	f(u) = f(x) + (u-x)f'(x) + \mathcal{O}(h^2),
+}
+since $\lvert u-x \rvert \leq h$ we have that the higher-order terms scale as $\mathcal{O}(h^2)$.
+
+Therefore, we can further simplify our calculation of $\Exp\left[\hat{f}(x)\right] = \frac{1}{h} \int_{B_j} f(u)du$ by evaluating
+\al{
+	\int_{B_j} f(u)du &= \int_{B_j} \left(f(x) + (u-x)f'(x) + \mathcal{O}(h^2)\right)dn \nonumber \\ \nonumber
+	&= h \cdot f(x) + f'(x)\int(u-x)du + \mathcal{O}(h^2) \cdot h \\ \nonumber
+	&= h \cdot f(x) + f'(x) \cdot \mathcal{O}(h^2) + \mathcal{O}(h^3),
+} 
+given that $\lvert u-x \rvert \leq h$ and the size of $B_j$ is similarly bounded as $\leq h$.  Thus, we can evaluate the expectation of the estimator as
+\al{
+	\Exp\left[\hat{f}(x)\right] = \frac{1}{h} \cdot \int_{B_j} f(u)du = f(x) + f'(x)\cdot \mathcal{O}(h) + \mathcal{O}(h^2). %\\ \nonumber
+}
+
+\subsubsection{Bias}
+Given our previous calculation of $\Exp\left[\hat{f}(x)\right]$, we can evaluate the bias as
+\al{
+	\left(f(x) - \Exp\left[\hat{f}(x)\right]\right)^2 &= \left(f'(x)\cdot \mathcal{O}(h) + \mathcal{O}(h^2)\right)^2 \\ \nonumber
+	&= h^2\left(f'(x) + \mathcal{O}(h)\right)^2 \\ \nonumber
+	&= \mathcal{O}(h^2)f'(x)^2 +  \mathcal{O}(h^3).\\ \nonumber
+}
+And thus, the integrated bias can be calculated as
+\al{
+	\int \left(f(x) - \Exp\left[\hat{f}(x)\right]\right)^2dx = \mathcal{O}(h^2) \cdot \int f'(x)^2 dx +  \mathcal{O}(h^3). \\ \nonumber
+}
+
+\subsubsection{Variance}
+Given our previous calculation of $\Exp\left[\hat{f}(x)\right]$, we can evaluate the integrated vairance as
+\al{
+	\int \Var(\hat{f}(x))dx &= \sum\limits_{j=1}^m \int_{B_j}  \Var(\hat{f}(x))dx \\ \nonumber
+	&= \sum\limits_{j=1}^m  \frac{p_j(1-p_j)}{h^2 \cdot n} \cdot h \\ \nonumber
+	&\leq \sum\limits_{j=1}^m  \frac{p_j}{h^2 \cdot n} \cdot h \\ \nonumber
+	&= \frac{1}{nh}\sum\limits_{j=1}^m  p_j \\ \nonumber
+	&= \frac{1}{nh}.
+}
+
+Notice that the variance does not depend on $f$.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+\newpage
+\begin{comment}
+\sec{Macros for frequently used notations}
+Please try to reuse the macros defined below to ensure consistency.
+\begin{itemize}
+\item $\Exp$, 
+\al{
+\E_{x\sim P}, \Exp_{x\sim P} 
+}
+\item $\Pr[X=1\vert Y=2]$
+\item 
+\al{
+\argmin_{x: x\ge 1}
+}
+\item 
+$\theta$, $\theta^\star$, $\thetaerm$, 
+\item 
+$\cX,\cY, \cH, \cF$
+\item $x\sp{1}, y\sp{k}$
+\item 
+$x\in \R^3, \bbZ$
+\item $\err(5\theta)$
+\item $O(\cdot)$, $\tilO(\cdot)$
+\item $\iid$
+\item $\norm{x}, \Norm{x^{2^3}}$, $\norm{x}_{2}$
+\item 
+\end{itemize}
+\begin{theorem}
+..
+\end{theorem}
+\begin{lemma}
+...
+\end{lemma}
+\end{comment}
+%\sec{}
